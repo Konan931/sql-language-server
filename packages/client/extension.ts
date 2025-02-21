@@ -125,7 +125,7 @@ export function activate(context: ExtensionContext) {
   const serverModule = context.asAbsolutePath(
     path.join('packages', 'server', 'dist', 'vscodeExtensionServer.js')
   )
-  const execArgs = ['false'] // [1: debug]
+  const execArgs = ['false']
   const debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] }
   let connectionNames = []
   let connectedConnectionName = ''
