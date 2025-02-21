@@ -12,7 +12,7 @@ import {
   CompletionList,
 } from 'vscode'
 import {
-  LanguageClient,
+  BaseLanguageClient,
   LanguageClientOptions,
   ServerOptions,
   TransportKind,
@@ -115,13 +115,11 @@ export function getNotebookDocument(
 }
 
 export function activate(context: ExtensionContext) {
-  // console.log("sql-language-server extension activated")
   monitorJupyterCells()
   workspace.registerTextDocumentContentProvider(EMBED_SCHEME, {
     provideTextDocumentContent: (uri) => provideTextDocumentContent(uri),
   })
 
-  // Using the location of the javacript file built by `npm run prepublish`
   const serverModule = context.asAbsolutePath(
     path.join('packages', 'server', 'dist', 'vscodeExtensionServer.js')
   )
@@ -142,59 +140,16 @@ export function activate(context: ExtensionContext) {
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: SELECTORS,
-    diagnosticCollectionName: 'sqlLanguageServer',
-    synchronize: {
-      configurationSection: 'sqlLanguageServer',
-      // fileEvents: workspace.createFileSystemWatcher('**/.sqllsrc.json')
-    },
-    middleware: {
-      provideCompletionItem: async (
-        document,
-        position,
-        context,
-        token,
-        next
-      ) => {
-        const originalUri = document.uri.toString()
-        if (originalUri.startsWith(EMBED_SCHEME)) {
-          // console.log("Sending modified cell magic text to LSP server")
-          return await next(document, position, context, token)
-        } else if (isSqlMagic(document.getText())) {
-          // console.log("Handling a cell containing sql magic")
-          const text = commentSqlCellMagic(document.getText())
-          // console.log(`set vdc content ${originalUri} : ${text}`)
-          virtualDocumentContents.set(originalUri, text)
-          const encodedUri = encodeURIComponent(originalUri)
-          const vdocUriString = `${EMBED_SCHEME}://sql/${encodedUri}${FILE_EXTENSION}`
-          const vdocUri = Uri.parse(vdocUriString)
-          // Invoke completion, this will call us back again
-          // but with a virutal document
-          // with a properly commented out magic
-          return await commands.executeCommand<CompletionList>(
-            'vscode.executeCompletionItemProvider',
-            vdocUri,
-            position,
-            context.triggerCharacter
-          )
-        } else {
-          // console.log("Sending .sql file contents to LSP server")
-          return await next(document, position, context, token)
-        }
-      },
-    },
   }
 
-  const client = new LanguageClient(
+  const client = new BaseLanguageClient(
     'sqlLanguageServer',
-    'SQL Language Server',
-    serverOptions,
+    'sqlLanguageServer',
     clientOptions
   )
-  client.registerProposedFeatures()
-  const disposable = client.start()
-
+  client.registerFeatures([])
   const switchConnection = commands.registerCommand(
-    'extension.switchDatabaseConnection',
+    'extension.switchConnection',
     async () => {
       if (connectionNames.length === 0) {
         Window.showWarningMessage('Need to set personal config file at first.')
@@ -257,7 +212,7 @@ export function activate(context: ExtensionContext) {
   context.subscriptions.push(switchConnection)
   context.subscriptions.push(fixAllFixableProblem)
   context.subscriptions.push(rebuildSqlite3)
-  context.subscriptions.push(disposable)
+  context.subscriptions.push(...disposables)
   client.onReady().then(() => {
     client.onNotification('sqlLanguageServer.finishSetup', (params) => {
       connectionNames = params.personalConfig?.connections
@@ -270,3 +225,6 @@ export function activate(context: ExtensionContext) {
     })
   })
 }
+
+
+
